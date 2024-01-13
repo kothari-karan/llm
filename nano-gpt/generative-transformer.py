@@ -72,19 +72,22 @@ class MultiHeadAttention(nn.Module):
     def __init__(self, n_heads, head_size):
         super().__init__()
         self.heads = nn.ModuleList([Head(head_size) for _ in range(n_heads)])
+        self.proj = nn.Linear(n_embed, n_embed)
 
     def forward(self, x):
         # x is (B, T, n_embed)
-        heads = [h(x) for h in self.heads] # list of (B, T, head_size)
-        heads = torch.cat(heads, dim=-1) # (B, T, n_heads * head_size)
-        return heads
+        out = [h(x) for h in self.heads] # list of (B, T, head_size)
+        out = torch.cat(out, dim=-1) # (B, T, n_heads * head_size)
+        out = self.proj(out) 
+        return out
 
 class FeedForward(nn.Module):
     def __init__(self, n_embed):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(n_embed, n_embed),
+            nn.Linear(n_embed, 4 * n_embed),
             nn.ReLU(),
+            nn.Linear(4 * n_embed, n_embed), # projection layer going back to the residual pathway
         )
 
     def forward(self, x):
@@ -98,8 +101,8 @@ class Block(nn.Module):
         self.ff = FeedForward(n_embed)
 
     def forward(self, x):
-        x = self.sa_heads(x) # apply self-attention (B, T, n_embed)
-        x = self.ff(x) # apply feed-forward (B, T, n_embed)
+        x = x + self.sa_heads(x) # apply self-attention (B, T, n_embed)
+        x = x + self.ff(x) # apply feed-forward (B, T, n_embed)
         return x
 
 class BigramLanguageModel(nn.Module):
